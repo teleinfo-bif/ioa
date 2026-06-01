@@ -2,26 +2,41 @@
 
 Version 1.0.0
 
-## 关于
+## 引言
 
-IOA(Internet of Agents，简称IOA)是基于区块链技术构建的去中心化身份标识系统，旨在为用户提供安全、可信、隐私保护的身份标识服务。IOA 是一种分布式身份标识符（DID），适用于区块链网络，支持个人、企业、设备和数字对象的身份标识与认证。有关DID和DID方法规范的更多信息，请参阅[DID入门](https://github.com/WebOfTrustInfo/rebooting-the-web-of-trust-fall2017/blob/master/topics-and-advance-readings/did-primer.md)和[DID规范](https://www.w3.org/TR/did-core/)。
+IOA（Internet of Agents，智能体互联网）是基于区块链的 **W3C DID 方法 `did:ioa`**，为智能体互联网提供去中心化、权利下放且注重数据安全与隐私保护的数字身份服务。智能体、注册节点与组织等主体可通过 `did:ioa` 在链上登记 DID 文档，表达身份、能力与可达性，支撑跨节点的注册、发现与互联。
 
-## 摘要
+DID 文档侧重承载「主体是谁、具备何种能力、如何连接」等可解析信息（链上注册、发现与互联，见 §4）；可验证凭证（VC）由签发方按 [W3C VC 数据模型](https://www.w3.org/TR/vc-data-model/) 对主体属性（如注册状态、能力范围、所属单位等）作出可验证断言，供验签与策略判断。二者相互补充：`credentialSubject.id` 通常为主体 `did:ioa`，VC 根级 `id` 可为独立 URN，不必与 DID 路径相同；字段不必与 DID 文档一一镜像。
 
-IOA 为个人、企业、设备和数字对象等提供基于区块链技术数字身份服务，旨在构建一套去中心化的、权利下放的、数据安全、隐私得到保护的标识符系统。通过 IOA，可以实现可信连接、交互和互操作，推动数字经济的发展。
+§4 以 [W3C DID Core](https://www.w3.org/TR/did-core/) 字段为文档主体；IOA 智能体与链上业务扩展置于 `extension`。链上注册 API 见 §5。有关 DID 与方法规范的背景，请参阅 [DID 入门](https://github.com/WebOfTrustInfo/rebooting-the-web-of-trust-fall2017/blob/master/topics-and-advance-readings/did-primer.md) 与 [DID 规范](https://www.w3.org/TR/did-core/)。
+
+## 设计目标
+
+| 目标 | 说明 | 规范落点 |
+|------|------|----------|
+| **注册（Registration）** | 智能体、组织或注册节点获得唯一、可验证的 `did:ioa`，并在链上登记 DID 文档。 | §3 标识符、§5.1 创建 |
+| **发现（Discovery）** | 通过解析获取文档中的能力描述与服务端点，支持检索与匹配。 | §2.1、§5.2 Read、`service`（含子链解析） |
+| **互联（Interconnection）** | 基于 `serviceEndpoint` 与协议能力（如 A2A）建立跨节点可信连接。 | §4.1.2 `AgentDescription` |
+| **治理与安全（Governance & Security）** | 密钥控制、恢复、停用与隐私最小化。 | §5.3–5.5、§6 |
 
 ## 文档状态
 
-本文档为 IOA 协议规范的 v1.0.0版本。文档的最新版本可在 [IOA 官方文档仓库](https://github.com/teleinfo-bif/ioa/blob/main/doc/en/IOA%20Protocol%20Specification.md) 获取。
+本文档为 IOA 协议规范的 v1.0.0 版本。最新版本见本仓库 [中文版](IOA身份标识协议规范.md) 。
 
 ## 1. IOA 命名空间
 
 - 标识此 `DID` 方法的 method name 是：`ioa`
-- 使用此方法的` DID` **必须** 以下前缀开头：`did:ioa`。此字符串 **必须** 为小写。在前缀之后的 DID 的剩余部分由特定算法生成。
+- 使用此方法的 `DID` **必须** 以下前缀开头：`did:ioa`。此字符串 **必须** 为小写。在前缀之后的 DID 的剩余部分由特定算法生成。
 
 ## 2. 适用系统
 
 IOA 方法适用于区块链网络，从该网络发布开始正式使用。
+
+### 2.1 DID 解析
+
+本方法的**标准解析**为 §5.2 **Read**：向链上注册节点发送 `operation: "read"` 请求，成功时从 `data.didDocument` 取得符合 §4 的 DID 文档（不含请求侧 `proof`）。
+
+含 **acsn** 的 DID（如 `did:ioa:tele`）须先 Read 主链文档，从 `service` 中 `type` 为 `DIDSubResolver` 的项获取子链解析地址，再按该服务约定查询目标 DID；子链 Read 的请求/响应形态与 §5.2 相同，由子链注册节点实现。
 
 ## 3. IOA 标识符
 
@@ -29,9 +44,10 @@ IOA 方法适用于区块链网络，从该网络发布开始正式使用。
 
 - IOA 的组成结构如下：
 
-<img src="image\ioa.png" alt="../" style="zoom:67%;" />
+<img src="image/ioa.png" style="zoom: 67%;" />
 
-- `did:ioa:tele`(ascn号) 这样的 `IOA` 是一类特殊的IOA, 存放子链解析服务，只有前三个部分，不包含后缀。 对应的 `IOA` 文档里存放子链解析地址。
+- **智能体及一般主体**（默认）：`did:ioa:` + **suffix**（22–42 个字母或数字，由公钥编码得到，见下文生成步骤）。例如 `did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp` 表示智能体标识。
+- **可选 acsn**：4 个字母或数字的前缀段（见下文 ABNF），用于特殊类型。例如 `did:ioa:tele` 仅含 acsn、无 suffix，用于子链解析服务，对应 DID 文档内存放子链解析地址。
 
 - IOA 生成方案由以下 ABNF 定义：
 
@@ -51,17 +67,17 @@ suffix = (22,42)(ALPHA / DIGIT); 长度范围22-42的字母或数字组合
 
 3. 使用 Base58、Base64 或 Base32 编码方式对公钥进行编码。
 
-4. 拼接前缀 `did:ioa:` 和编码后的公钥字符串，形成完整的 IOA。
+4. 拼接前缀 `did:ioa:` 和编码后的公钥字符串，形成完整的 IOA（生成流程示意图见 `image/generateIOA.png`，资源待补充）。
 
-   <img src="image\generateIOA.png" style="zoom: 50%;" />
+<img src="image/generateIOA.png" style="zoom: 50%;" />
 
 加密方法：
 
-| 公私钥支持算法 | 加密类型 |
-| -------------- | -------- |
-| SM2            | 'z'      |
-| ED25519        | 'e'      |
-| Secp256k1      | 's'      |
+| 公私钥支持算法   | 加密类型 |
+| --------- | ---- |
+| SM2       | 'z'  |
+| ED25519   | 'e'  |
+| Secp256k1 | 's'  |
 
 编码方法：
 
@@ -73,192 +89,291 @@ suffix = (22,42)(ALPHA / DIGIT); 长度范围22-42的字母或数字组合
 
 ## 4. IOA 文档规范
 
-### 4.1 IOA 规范说明
-IOA 文档遵循 DID Document 规范，并在之基础上做了一定的扩展。IOA 文档字段说明如下：
+IOA DID 文档遵循 [DID Core](https://www.w3.org/TR/did-core/)：互操作字段位于文档顶层；IOA 方法扩展统一置于 `extension` 对象。链上 Create/Update 等请求可在 `didDocument` 外携带 `proof`（见 §5），**不**作为 §4.3 标准解析结果的一部分。
 
-- `context`：必填字段。一组解释 JSON-LD 文档的规则，遵循 DID 规范，用于实现不同 DID Document 的互操作，必须包含 https://www.w3.org/ns/did/v1 。
-- `version`：必填字段。文档的版本号，用于文档的版本升级。
-- `id`：必填字段。文档的 IOA。
-- `publicKey`：选填字段。一组公钥，包含：
-  - `id`，公钥的 ID。
-  - `type`，字符串，代表公钥的加密算法类型，支持 SM2、Ed25519 和Secp256k1 三种。
-  - `controller`，一个 IOA，表明此公钥的归属。
-  - `publicKeyHex`，公钥的十六进制编码。
-- `authentication`：必填字段。一组公钥的 IOA，表明此 IOA 的归属，拥有此公钥对应私钥的一方可以控制和管理此 IOA 文档。
-- `alsoKnownAs`：选填字段。一组和本 IOA 相关联的其他 ID，包括：
-  - `type`，关联标识的类型。
-  - `id`，关联的标识。
-- `extension`：IOA 扩展字段。包含如下字段：
-  - `recovery`，选填字段。一组公钥 ID，在 authentication 私钥泄漏或者丢失的情况下用来恢复对文档的控制权。
-  - `ttl`，必填字段。Time-To-Live，即如果解析使用缓存的话缓存生效的时间，单位秒。
-  - `delegateSign`，选填字段。第三方对 publicKey 的签名，可信解析使用。包括：
-    - `signer`，签名者，这里是一个公钥的 ID。
-    - `signatureValue`，使用相应私钥对 publicKey 字段的签名。
-  - `type`，IOA 文档的属性类型。
-- `attributes`：必填字段。一组属性。包含如下字段：
+### 4.1 字段说明
 
-| 参数    | 描述                                        |
-| ------- | ------------------------------------------- |
-| key     | 属性的关键字                                |
-| desc    | 选填。属性描述                              |
-| encrypt | 选填。是否加密，0非加密，1加密              |
-| format  | 选填。image、text、video、mixture等数据类型 |
-| value   | 选填。属性自定义value                       |
+#### 4.1.1 DID Core
 
-- `acsns`：选填字段。一组子链 `AC` 号，只有 `IOA` 文档类型不是凭证类型且文档是主链上的 `IOA` 文档才可能有该字段，存放当前IOA拥有的所有 `AC` 号。
-- `verifiableCredentials`：选填字段。凭证列表，包含：
-  - `id`，可验证声明的 IOA
-  - `type`，凭证类型
-- `service`：选填字段。一组服务地址，包含：
-  - `id`，服务地址的 ID
-  - `type`，字符串，代表服务的类型
-  - `serviceEndPoint`，一个 URI 地址
-- `created`：必填字段。创建时间
-- `updated`：必填字段。上次的更新时间
-- `proof`：选填字段。文档所有者对文档内容的签名，包含：
-  - `creator`，proof 的创建者，这里是一个公钥的 ID
-  - `signatureValue`，使用相应私钥对除 proof 字段的整个 IOA 文档签名
+- `@context`：**必填**。JSON-LD 上下文数组，**必须**包含 `https://www.w3.org/ns/did/v1`。使用 secp256k1 验证密钥时 **应** 增加 `https://w3id.org/security/suites/secp256k1-2019/v1`。
+- `id`：**必填**。本文档对应的 `did:ioa` 标识符。
+- `verificationMethod`：**必填**（`did:ioa:tele` 等系统解析 DID **MAY** 为空数组，见 §4.3）。验证方法数组，每项包含：
+  - `id`：验证方法 ID（**必须**为 `{did}#{fragment}`）。
+  - `type`：验证密钥类型，如 `EcdsaSecp256k1VerificationKey2019`（secp256k1）、或方法实现支持的其它 W3C 安全套件类型。
+  - `controller`：控制该密钥的 DID，通常与文档 `id` 相同。
+  - 密钥材料：如 `publicKeyCompressed`（secp256k1 压缩公钥，十六进制）等，依 `type` 与套件上下文而定。
+- `authentication`：**必填**。`verificationMethod` 的 `id` 列表（含 `#fragment`），用于文档控制与链上操作授权。
+- `version`：推荐。文档版本号字符串（如 `1.0.0`）。
+- `service`：选填。服务端点数组，见 §4.1.2。
+- `alsoKnownAs`：选填。关联标识数组，每项含 `type`、`id`。
+- `created` / `updated`：选填。ISO-8601 时间戳。
 
-### 4.2 IOA 结构体定义
+#### 4.1.2 `service`
+
+**类型 A：`AgentDescription`（智能体注册与发现）**
+
+- `id`、`type`（固定为 `AgentDescription`）
+- `name`、`description`：智能体名称与描述
+- `capabilities`：
+  - `tags`：**字符串数组**；每项为逗号分隔的一个或多个能力/任务 code（编码体系与 `extension.taskType` / 平台字典一致，见 §4.1.4）。
+  - `skills`：技能名称字符串数组。
+  - `protocol`：互联协议标识数组（如 `A2A`）。
+- `serviceEndpoint`：**字符串数组**，可达 URI 列表（如 A2A 端点）
+
+**类型 B：`DIDSubResolver`（子链解析）**
+
+用于 `did:ioa:tele` 等场景：`id`、`type`（`DIDSubResolver`）、`version`、`serverType`、`protocol`、`serviceEndpoint`（字符串）、`port`。`serverType`、`protocol` 取值见 §4.1.4。
+
+#### 4.1.3 `extension`（IOA 方法扩展）
+
+| 字段 | 说明 | 是否可选 |
+|------|------|----------|
+| `taskType` | 智能体任务类型 code（逗号分隔） | 智能体文档推荐 |
+| `applicationDomain` | 应用领域 code | 智能体文档推荐 |
+| `companyDid` / `companyName` | 所属单位 DID 与名称 | 可选 |
+| `registrationNodeDid` / `registrationNodeName` | 注册节点 DID 与名称 | 可选 |
+| `recovery` | 恢复用 `verificationMethod` id 列表 | 可选 |
+| `ttl` | 解析缓存时间（秒） | 链上注册时推荐 |
+| `attributes` | 属性数组（`key`、`desc`、`encrypt`、`format`、`value`） | 可选 |
+| `acsns` | 子链 AC 号列表 | 可选 |
+| `verifiableCredentials` | 凭证引用列表（`id`、`type`） | 可选 |
+| `delegateSign` | 委托签名（`signer`、`signatureValue`） | 可选 |
+| `type` | 文档属性类型（整型） | 可选 |
+
+#### 4.1.4 编码与枚举
+
+**`DIDSubResolver.serverType`（解析地址类型）**
+
+| 值 | 含义 |
+|----|------|
+| 1 | URL 地址（HTTP/HTTPS，与 `serviceEndpoint` 配合使用） |
+
+**`DIDSubResolver.protocol`（传输协议）**
+
+| 值 | 含义 |
+|----|------|
+| 1 | TCP |
+| 2 | WebSocket |
+| 3 | HTTP/HTTPS（与 §5 JSON POST API 一致） |
+
+实现 **MAY** 扩展上表未列取值；客户端 **SHOULD** 忽略未知值。
+
+**`extension.taskType` / `extension.applicationDomain`**
+
+平台字典 code，在 `extension` 中以**逗号分隔字符串**表示（如 `"0503,0501"`）。具体 code 表由注册节点或平台字典维护，本规范不展开枚举。
+
+**`extension.type`（文档属性类型，可选）**
+
+| 值 | 含义 |
+|----|------|
+| 206 | 智能体 DID 文档（实现常用） |
+
+**`alsoKnownAs.type`**
+
+关联标识分类整型；语义由实现或业务字典定义。
+
+**`extension.verifiableCredentials[].type`（凭证引用类型）**
+
+| 值   | 含义                                                                                        |
+| --- | ----------------------------------------------------------------------------------------- |
+| 1   | 链上可验证声明引用（遗留实现）                                                                           |
+| 2   | 外部 W3C VC 引用（`id` 为 VC 标识 URI/URN；由签发方按 VC 数据模型签发，`credentialSubject.id` 通常为主体 `did:ioa`） |
+
+**`extension.delegateSign`（委托签名，可选）**
+
+用于可信解析等场景：委托方对文档 `verificationMethod` 数组内容的完整性背书。
+
+| 字段 | 说明 |
+|------|------|
+| `signer` | 签名方 verification method `id` |
+| `signatureValue` | 对 `verificationMethod` 数组做 §5.0.2 同款待签序列化后，由 `signer` 对应私钥签名的 Base58 值 |
+
+解析方 **MAY** 在缓存前校验 `delegateSign`；未携带时按常规 DID 解析流程处理。
+
+### 4.2 结构体定义
 
 **DIDDocument**
 
-| 字段名称       | 类型          | 描述                                                  | 是否可选 |
-| -------------- | ------------- | ----------------------------------------------------- | -------- |
-| Context        | []string      | DID 文档的上下文信息，通常包含 JSON-LD 的上下文 URL。 | 必填     |
-| Version        | string        | DID 文档的版本号。                                    | 必填     |
-| ID             | string        | DID 的唯一标识符。                                    | 必填     |
-| PublicKey      | []PublicKey   | 公钥信息数组，包含与 DID 关联的公钥。                 | 必填     |
-| Authentication | []string      | 用于身份验证的公钥 ID 列表。                          | 必填     |
-| AlsoKnownAs    | []AlsoKnownAs | 与当前 DID 相关联的其他 DID 列表。                    | 可选     |
-| Extension      | Extension     | 扩展字段，包含额外的元数据或配置信息。                | 必填     |
-| Service        | []Service     | 与 DID 关联的服务信息数组。                           | 可选     |
-| Created        | string        | DID 文档的创建时间。                                  | 必填     |
-| Updated        | string        | DID 文档的最后更新时间。                              | 必填     |
-| Proof          | Proof         | 签名信息，用于验证 DID 文档的完整性和来源。           | 可选     |
+| 字段名称 | 类型 | 描述 | 是否可选 |
+|----------|------|------|----------|
+| Context | []string | JSON-LD `@context` | 必填 |
+| ID | string | `did:ioa` 标识符 | 必填 |
+| VerificationMethod | []VerificationMethod | 验证方法 | 必填 |
+| Authentication | []string | verification method id 列表 | 必填 |
+| Version | string | 文档版本 | 推荐 |
+| Service | []Service | 服务数组 | 可选 |
+| AlsoKnownAs | []AlsoKnownAs | 关联标识 | 可选 |
+| Extension | Extension | IOA 扩展 | 推荐 |
+| Created | string | 创建时间 | 可选 |
+| Updated | string | 更新时间 | 可选 |
 
-**PublicKey** 
+**VerificationMethod**
 
-| 字段名称     | 类型   | 描述                           | 是否可选 |
-| ------------ | ------ | ------------------------------ | -------- |
-| ID           | string | 公钥的唯一标识符。             | 必填     |
-| Type         | string | 公钥的类型，例如 "SECP256K1"。 | 必填     |
-| Controller   | string | 控制该公钥的 DID。             | 必填     |
-| PublicKeyHex | string | 公钥的十六进制表示。           | 必填     |
+| 字段名称 | 类型 | 描述 | 是否可选 |
+|----------|------|------|----------|
+| ID | string | 验证方法 ID（含 fragment） | 必填 |
+| Type | string | 如 `EcdsaSecp256k1VerificationKey2019` | 必填 |
+| Controller | string | 控制方 DID | 必填 |
+| PublicKeyCompressed | string | secp256k1 压缩公钥（hex） | 依 type |
 
-**AlsoKnownAs** 
+**Extension** — 字段同 §4.1.3。
 
-| 字段名称 | 类型   | 描述             | 是否可选 |
-| -------- | ------ | ---------------- | -------- |
-| Type     | int    | 关联 ID 的类型。 | 必填     |
-| ID       | string | 关联的 DID。     | 必填     |
+**AgentDescription（service）**
 
-**Extension** 
+| 字段名称 | 类型 | 描述 | 是否可选 |
+|----------|------|------|----------|
+| ID | string | 服务 ID | 必填 |
+| Type | string | `AgentDescription` | 必填 |
+| Name | string | 名称 | 必填 |
+| Description | string | 描述 | 推荐 |
+| Capabilities | object | `tags`、`skills`、`protocol` | 推荐 |
+| ServiceEndpoint | []string | URI 列表 | 必填 |
 
-| 字段名称              | 类型                   | 描述                                  | 是否可选 |
-| --------------------- | ---------------------- | ------------------------------------- | -------- |
-| Recovery              | []string               | 用于恢复 DID 的公钥 ID 列表。         | 可选     |
-| TTL                   | uint                   | 缓存时间，单位为秒。                  | 必填     |
-| DelegateSign          | DelegateSign           | 委托签名信息。                        | 可选     |
-| Type                  | uint                   | 扩展字段的类型。                      | 必填     |
-| Attributes            | []Attribute            | 属性列表，包含与 DID 相关的额外信息。 | 必填     |
-| VerifiableCredentials | []VerifiableCredential | 可验证凭证列表。                      | 可选     |
+**DIDSubResolver（service）** — 字段见 §4.1.2 类型 B。
 
-**DelegateSign** 
+**Proof**（仅 §5 链上请求，非解析文档必选）
 
-| 字段名称       | 类型   | 描述            | 是否可选 |
-| -------------- | ------ | --------------- | -------- |
-| Signer         | string | 签名公钥的 ID。 | 必填     |
-| SignatureValue | string | 签名的值。      | 必填     |
+| 字段名称 | 类型 | 描述 |
+|----------|------|------|
+| Creator | string | verification method id |
+| SignatureValue | string | 签名值 |
 
-**Attribute** 
+### 4.3 文档示例
 
-| 字段名称 | 类型   | 描述                                 | 是否可选 |
-| -------- | ------ | ------------------------------------ | -------- |
-| Key      | string | 属性的键。                           | 必填     |
-| Desc     | string | 属性的描述。                         | 可选     |
-| Encrypt  | uint   | 是否加密，0 表示非加密，1 表示加密。 | 可选     |
-| Format   | string | 数据类型，例如 "text"、"image" 等。  | 可选     |
-| Value    | string | 属性的值。                           | 可选     |
-
-**VerifiableCredential** 
-
-| 字段名称 | 类型   | 描述               | 是否可选 |
-| -------- | ------ | ------------------ | -------- |
-| ID       | string | 凭证的唯一标识符。 | 必填     |
-| Type     | uint   | 凭证的类型。       | 必填     |
-
-**Service**
-
-如果Service ，当 `type` 为子链解析服务时，service为以下结构：
-
-| 字段名称        | 类型   | 描述                 | 是否可选 |
-| --------------- | ------ | -------------------- | -------- |
-| ID              | string | 服务的唯一标识符。   | 必填     |
-| Type            | string | DIDSubResolver       | 必填     |
-| Version         | string | 服务的版本号。       | 必填     |
-| ServerType      | uint   | 服务的服务地址类型。 | 必填     |
-| Protocol        | uint   | 服务支持的协议类型。 | 必填     |
-| ServiceEndpoint | string | 服务的端点 URL。     | 必填     |
-| Port            | uint   | 服务的端口号。       | 必填     |
-
-否则为
-
-| 字段名称        | 类型   | 描述               | 是否可选 |
-| --------------- | ------ | ------------------ | -------- |
-| ID              | string | 服务的唯一标识符。 | 必填     |
-| Type            | string | 服务的类型。       | 必填     |
-| ServiceEndpoint | string | 服务的端点 URL。   | 必填     |
-
-**Proof** 
-
-| 字段名称       | 类型   | 描述                | 是否可选 |
-| -------------- | ------ | ------------------- | -------- |
-| Creator        | string | 创建签名的公钥 ID。 | 必填     |
-| SignatureValue | string | 签名的值。          | 必填     |
-
-### 4.3 IOA 文档示例：
+**智能体 DID 文档**：
 
 ```json
 {
-    "context": ["https://www.w3.org/ns/did/v1"],
+    "@context": [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+    ],
+    "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
+    "verificationMethod": [{
+        "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-6cda3f6e",
+        "type": "EcdsaSecp256k1VerificationKey2019",
+        "controller": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
+        "publicKeyCompressed": "03bc5e9cea08abaa5d2062847064535ccab5a460ce70d32de403bc62caa5eb418e"
+    }, {
+        "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-recovery01",
+        "type": "EcdsaSecp256k1VerificationKey2019",
+        "controller": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
+        "publicKeyCompressed": "02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }],
+    "authentication": [
+        "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-6cda3f6e"
+    ],
     "version": "1.0.0",
-    "id": "did:ioa:efnVUgqQFfYeu97ABf6sGm3WFtVXHZB2",
-    "publicKey": [{
-        "id": "did:ioa:efnVUgqQFfYeu97ABf6sGm3WFtVXHZB2#key-1",
-        "type": "Ed25519",
-        "controller": "did:ioa:efnVUgqQFfYeu97ABf6sGm3WFtVXHZB2",
-        "publicKeyHex": "b9906e1b50e81501369cc777979f8bcf27bd1917d794fa6d5e320b1ccc4f48bb"
-    }],
-    "authentication": ["did:ioa:efnVUgqQFfYeu97ABf6sGm3WFtVXHZB2#key-1"],
-    "extension": {
-        "recovery": ["did:ioa:efnVUgqQFfYeu97ABf6sGm3WFtVXHZB2#key-2"],
-        "ttl": 86400,
-        "delegateSign": {
-            "signer": "did:ioa:efJgt44mNDewKK1VEN454R17cjso3mSG#key-1",
-            "signatureValue": "eyJhbGciOiJSUzI1NiIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19"
-        },
-        "type": 206
-    },
     "service": [{
-        "id": "did:ioa:ef24NBA7au48UTZrUNRHj2p3bnRzF3YCH#subResolve",
-        "type": "IDPointerResolve",
-        "serviceEndpoint": "https://resolver.ioa.org"
+        "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#agent-description",
+        "type": "AgentDescription",
+        "name": "法律风险评估智能体",
+        "description": "专业的法律风险评估智能体，对合同、协议、法律文档等进行全面的法律风险评估，识别潜在的法律风险点，并提供专业的风险评估报告和风险规避建议。",
+        "capabilities": {
+            "tags": ["0503,0501", "0701,0702,0703,0704"],
+            "skills": ["法律风险评估"],
+            "protocol": ["A2A"]
+        },
+        "serviceEndpoint": ["http://127.0.0.1:9090"]
     }],
-    "created": "2021-05-10T06:23:38Z",
-    "updated": "2021-05-10T06:23:38Z",
-    "proof": {
-        "creator": "did:ioa:efJgt44mNDewKK1VEN454R17cjso3mSG#key-1",
-        "signatureValue": "9E07CD62FE6CE0A843497EBD045C0AE9FD6E1845414D0ED251622C66D9CC927CC21DB9C09DFF628DC042FCBB7D8B2B4901E7DA9774C20065202B76D4B1C15900"
+    "extension": {
+        "taskType": "0503,0501",
+        "applicationDomain": "0701,0702,0703,0704",
+        "companyDid": "did:ioa:sfuCqVuDmycvFXb3pkTZ6fFW86sKDtn1",
+        "companyName": "测试单位",
+        "registrationNodeDid": "did:ioa:sfJmAbKzPNdYF9WNZ2Jv5rK1qn8VaHpm",
+        "registrationNodeName": "智能体互联网注册节点",
+        "recovery": [
+            "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-recovery01"
+        ]
+    }
+}
+```
+
+上例为解析/展示用金样例。链上 **Create** 时 `extension` **应**另含 `ttl`（§5.1），智能体文档 **宜**含 `extension.type`: `206`（§4.1.4）。
+
+**子链解析服务示例**（`service.type` 为 `DIDSubResolver`）：
+
+```json
+{
+    "@context": ["https://www.w3.org/ns/did/v1"],
+    "id": "did:ioa:tele",
+    "verificationMethod": [],
+    "authentication": [],
+    "version": "1.0.0",
+    "service": [{
+        "id": "did:ioa:tele#subResolve",
+        "type": "DIDSubResolver",
+        "version": "1.0.0",
+        "serverType": 1,
+        "protocol": 3,
+        "serviceEndpoint": "https://resolver.ioa.org",
+        "port": 8080
+    }],
+    "extension": {
+        "ttl": 86400
     }
 }
 ```
 
 ## 5. IOA 方法
 
+§5 定义链上注册节点的 HTTP API。标准 DID 解析见 §2.1（即 §5.2 Read）。
+
+### 5.0 通用约定
+
+#### 5.0.1 传输层
+
+所有 §5 操作经 **同一 HTTP 端点** 调用：
+
+- **方法**：`POST`
+- **`Content-Type`**：`application/json; charset=utf-8`
+- **请求体**：JSON 对象，**必须**含 `id`、`operation`；Create/Update/Recovery **必须**含 `didDocument`；需授权的操作 **必须**含顶层 `proof`（不在 `didDocument` 内）
+- **响应体**：JSON 对象，**应**含 `errorCode`、`message`；Read 成功时另含 `data.didDocument`（见 §5.6）
+
+**示范**（注册节点基址由部署方提供）：
+
+```http
+POST /api/v1/ioa HTTP/1.1
+Host: registry.example.ioa
+Content-Type: application/json; charset=utf-8
+
+{"id":"did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp","operation":"read"}
+```
+
+#### 5.0.2 链上请求 `proof` 与签名
+
+[DID Core](https://www.w3.org/TR/did-core/) 将可验证证明用于校验控制关系；解析得到的 DID 文档（§4.3）**不包含**嵌入 `proof`（与 DID Core 1.0 一致）。链上 Create/Update/Deactivate/Recovery 在请求顶层携带 IOA 方法专用的简化 `proof`：
+
+| 字段 | 说明 |
+|------|------|
+| `creator` | verification method `id`（含 `#fragment`） |
+| `signatureValue` | 签名字符串 |
+
+**权限**（与 DID Core `authentication` 关系一致）：
+
+| 操作 | `proof.creator` **必须**属于 |
+|------|------------------------------|
+| Create / Update | 请求体 `didDocument.authentication` 所列 id |
+| Deactivate | 链上**已存** DID 文档的 `extension.recovery` 所列 id（Deactivate 请求不含 `didDocument`） |
+| Recovery | 请求体 `didDocument.extension.recovery` 所列 id |
+
+对 Deactivate / Recovery，注册节点 **SHOULD** 以**执行操作前**链上已存文档判定 `proof.creator` 是否属于 `recovery` 列表。
+
+**待签载荷**：自请求 JSON 中**移除** `proof` 键后，对其余对象做 UTF-8 **紧凑 JSON** 序列化（对象键按 Unicode 码点升序、无多余空白；数组与嵌套对象递归应用相同规则）。
+
+**算法与编码**（与 `creator` 所指 `verificationMethod` 一致）：
+
+- 类型为 `EcdsaSecp256k1VerificationKey2019` 时：对载荷做 **SHA-256**，使用 secp256k1 私钥 **ECDSA** 签名；`signatureValue` 为签名的 **Base58** 编码（无校验和）。验签使用文档中对应 `publicKeyCompressed`（十六进制）。
+- 其它套件类型由实现定义，**SHOULD** 在部署文档中说明。
+
+注册节点 **MUST** 验签通过且 `creator` 具备上表权限后，方可执行对应操作。
+
+**与实现对齐**：上文序列化与编码为互操作**推荐**规则；若链上注册节点采用不同 JSON 规范化或签名编码，**MUST** 在部署文档中说明；客户端 **SHOULD** 以目标注册节点文档为准生成 `proof`。
+
 ### 5.1 创建（Create）
 
-注册接口主要完成IOA 文档的注册,支持HTTP POST 方法。创建 <code>IOA</code> 文档时 <code>proof</code> 字段的签名者需要是 <code>authentication</code> 字段里的 <code>公钥</code> 才有权限创建成功，如果IOA文档存在，则不允许重复创建。
+注册接口主要完成 IOA 文档的注册（传输与 `proof` 见 §5.0）。请求体中的 `didDocument` **应符合 §4**；顶层 `id` **必须**与 `didDocument.id` 相同。若文档已存在则不允许重复创建。
 
 #### 请求参数
 
@@ -266,76 +381,22 @@ IOA 文档遵循 DID Document 规范，并在之基础上做了一定的扩展�
 | ----------- | ------ | ------------------------------- |
 | id          | String | 要创建的IOA         |
 | operation   | String | "create"                        |
+| proof       | Object | 签名，见 §5.0.2 |
 | didDocument | Object | 要创建的IOA文档 |
 
 #### 请求示例
 
+`didDocument` 结构与 §4.3 智能体示例相同；链上创建时 `extension` **应**含 `ttl`，智能体文档 **宜**含 `extension.type`: `206`（§4.1.4）；`proof.creator` 为 `authentication` 中的主控密钥。
+
 ```json
 {
-    "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
+    "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
     "operation": "create",
-    "didDocument": {
-        "context": [
-            "https://www.w3.org/ns/did/v1"
-        ],
-        "version": "1.0.0",
-        "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-        "publicKey": [
-            {
-                "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "publicKeyHex": "04730dd9bd6256a6ffc03766e2d5b349f3734b7410116750b188b6d26b2ba092cf8c1ff07e6d61529a535681cb82f6e60501ca9ee2c1a672df631ff9a72a21c26b"
-            },
-            {
-                "id": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                "publicKeyHex": "04611176548da4a758187950dc2708a58ff7b4978c38cd9ae0961b889b74fa2f7be8592d69592bb2ffbc5315f8a563f479671ecf422d2ebd38d38c84c0d451b65c"
-            },
-            {
-                "id": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                "publicKeyHex": "04dd05980091d890191b128f29f46fce235b3e10f46cc9faab11de70d9f808e86769a9a955683eac7f3d40edc369d8c08492637493a0e72cc2838939980cfdb068"
-            },
-            {
-                "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "publicKeyHex": "04a1617f65ae9683820f8c9bd73d1cb85a98969359ddafe1c99de3a36d00d156968aedceeec71b98c9a9727aa63a55a5349f830dbc7ced5b9518c04e4bb4c76328"
-            }
-        ],
-        "authentication": [
-            "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-            "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX"
-        ],
-        "extension": {
-            "recovery": [
-                "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4"
-            ],
-            "ttl": 86400,
-            "type": 206,
-            "attributes": [
-                {
-                    "key": "201"
-                }
-            ]
-        },
-        "service": [
-            {
-                "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "type": "IDPointerResolve",
-                "serviceEndpoint": "127.0.0.1"
-            }
-        ],
-        "created": "2025-03-22T09:37:16Z",
-        "updated": "2025-03-22T09:37:16Z",
-        "proof": {
-            "creator": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-            "signatureValue": "2ExbMiHRpGSWxyZAwGgD4YnWUyXxhsp4F8mwGzE43VNrS3p3kru8JroVuox8AyXpyZrPhoepAUVtLwn3HyKnoXFcx1n"
-        }
-    }
+    "proof": {
+        "creator": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-6cda3f6e",
+        "signatureValue": "2ExbMiHRpGSWxyZAwGgD4YnWUyXxhsp4F8mwGzE43VNrS3p3kru8JroVuox8AyXpyZrPhoepAUVtLwn3HyKnoXFcx1n"
+    },
+    "didDocument": { "...": "同 §4.3 智能体 DID 文档；extension 增加 ttl: 86400、可选 type: 206" }
 }
 ```
 
@@ -350,64 +411,34 @@ IOA 文档遵循 DID Document 规范，并在之基础上做了一定的扩展�
 
 ### 5.2 读取（Read）
 
-通过 IOA 查询对应的 IOA 文档信息，支持 HTTP GET 方法。返回值为 <code>IOA</code> 文档的 <code>JSON</code> 字符串。
+通过 IOA 查询对应的 DID 文档（**标准解析**，见 §2.1）。返回值为包含 `errorCode` 与 `data.didDocument` 的 JSON 对象。
 
 #### 请求参数
 
 | 参数      | 字段类型 | 描述          |
 | --------- | -------- | ------------- |
-| id        | String   | 要读取的IOA |
-| operation | String   | "read"        |
+| id        | String   | 要读取的 IOA |
+| operation | String   | 固定为 `"read"` |
 
 #### 请求示例
 
-```plaintext
+```json
 {
-    "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
+    "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
     "operation": "read"
 }
 ```
+
 #### 返回数据
 
-| 参数                                                   | 字段类型       | 描述                                                          |
-| ------------------------------------------------------ | ------------- | ------------------------------------------------------------ |
-| errorCode                                              | Int           | 见响应码说明                                               |
-| data.didDocument                                       | Object        | 解析结果                                            |
-| data.didDocument.context                              | Array         | 一组url数组                                                         |
-| data.didDocument.version                               | String        | IOA文档的版本                             |
-| data.didDocument.id                                    | String        | 解析的IOA                                          |
-| data.didDocument.publicKey                             | Array(Object) | 公钥                                                   |
-| data.didDocument.publicKey.id                          | String        | 公钥id                                              |
-| data.didDocument.publicKey.type                        | String        | 公钥算法类型                                   |
-| data.didDocument.publicKey.controller                  | String        | 一个IOA,表明此公钥的归属               |
-| data.didDocument.publicKey.publicKeyHex                | String        | 十六进制公钥                                            |
-| data.didDocument.authentication                        | Array         | 一组公钥id                                                |
-| data.didDocument.alsoKnownAs                           | Array(Object) | 关联id                                              |
-| data.didDocument.alsoKnownAs.type                      | Int           | 关联id的类型                                             |
-| data.didDocument.alsoKnownAs.id                        | String        | 关联id                                              |
-| data.didDocument.extension                             | Object        | 扩展字段                                            |
-| data.didDocument.extension.recovery                    | Array         | 一组公钥id                                               |
-| data.didDocument.extension.ttl                         | long          | 缓存时间，单位秒                                       |
-| data.didDocument.extension.delegateSign                | Object        | 第三方对publicKey的签名，可信解析使用                          |
-| data.didDocument.extension.delegateSign.signer         | String        | 签名公钥id                                 |
-| data.didDocument.extension.delegateSign.signatureValue | String        | 签名的base58编码                                  |
-| data.didDocument.extension.type                        | Int           | 属性类型                                                 |
-| data.didDocument.extension.attributes                  | Array(Object) | 一组属性,属性结构见下文说明 |
-| data.didDocument.extension.acsns                       | Array(Object) | AC号列表                                                |
-| data.didDocument.extension.verfiableCredentials        | Array(Object) | 凭证列表，只有主链非凭证类型的BID文档才可能有本字段 |
-| data.didDocument.extension.verfiableCredentials.id     | String        | 凭证ID                                               |
-| data.didDocument.extension.verifiableCredentials.type  | Int           | 凭证类型                                              |
-| data.didDocument.service                               | Array(Object) | 一组服务地址，结构见下表                                            |
-| data.didDocument.service.id                            | String        | 服务地址的ID                                        |
-| data.didDocument.service.type                          | String        | 字符串，代表服务的类型                                         |
-| data.didDocument.service.serviceEndpoint               | String        | 服务的URL地址                                                |
-| data.didDocument.created                               | String        | 创建时间                                          |
-| data.didDocument.updated                               | String        | 上次的更新时间                                          |
-| data.didDocument.proof                                 | Object        | 签名信息                                      |
-| data.didDocument.proof.creator                         | String        | 签名公钥id                                      |
-| data.didDocument.proof.signatureValue                  | String        | 签名的base58编码                                  |
+| 参数 | 字段类型 | 描述 |
+|------|----------|------|
+| errorCode | Int | 见 §5.6 |
+| message | String | 可读说明（推荐） |
+| data.didDocument | Object | 解析结果；字段定义见 §4.1（不含嵌入 `proof`） |
 
-其中 <code>attributes</code> 结构如下：
+`extension.attributes` 数组元素结构如下：
+
 | 参数                                   | 字段类型   | 描述                     |
 | --------------------------------------------- | ------ | ------------------------------------- |
 | data.didDocument.extension.attributes.key     | String | 属性的key                     |
@@ -416,257 +447,58 @@ IOA 文档遵循 DID Document 规范，并在之基础上做了一定的扩展�
 | data.didDocument.extension.attributes.format  | String | image、text、video、mixture等数据类型 |
 | data.didDocument.extension.attributes.value   | String | 属性自定义value  |
 
-当 <code>service.type</code> 为子链解析服务时,service结构如下：
-
-| 参数                              | 字段类型   | 描述                                       |
-| ---------------------------------------- | ------ | ---------------------------------------------------- |
-| data.didDocument.service.id              | String | 服务地址的ID                              |
-| data.didDocument.service.type            | String | 字符串，代表服务的类型                             |
-| data.didDocument.service.version         | String | 解析服务支持的IOA协议版本 |
-| data.didDocument.service.protocol        | Int    | 解析服务支持的传输协议   |
-| data.didDocument.service.serverType      | Int    | 解析地址类型                           |
-| data.didDocument.service.serviceEndpoint | String | 解析地址                           |
-| data.didDocument.service.port            | Int    | 解析端口                                |
+当 `service.type` 为 `AgentDescription` 或 `DIDSubResolver` 时，结构见 §4.1.2。
 
 #### 返回示例
 
-- 成功返回普通 `IOA` 文档：
+- 成功返回智能体文档：`data.didDocument` 结构同 §4.3 智能体示例（**不含** `proof`）。
 
 ```json
 {
     "errorCode": 0,
+    "message": "success",
     "data": {
-        "didDocument": {
-            "context": [
-                "https://www.w3.org/ns/did/v1"
-            ],
-            "version": "1.0.0",
-            "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-            "publicKey": [
-                {
-                    "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                    "type": "SECP256K1",
-                    "controller": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                    "publicKeyHex": "04730dd9bd6256a6ffc03766e2d5b349f3734b7410116750b188b6d26b2ba092cf8c1ff07e6d61529a535681cb82f6e60501ca9ee2c1a672df631ff9a72a21c26b"
-                },
-                {
-                    "id": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                    "type": "SECP256K1",
-                    "controller": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                    "publicKeyHex": "04611176548da4a758187950dc2708a58ff7b4978c38cd9ae0961b889b74fa2f7be8592d69592bb2ffbc5315f8a563f479671ecf422d2ebd38d38c84c0d451b65c"
-                },
-                {
-                    "id": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                    "type": "SECP256K1",
-                    "controller": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                    "publicKeyHex": "04dd05980091d890191b128f29f46fce235b3e10f46cc9faab11de70d9f808e86769a9a955683eac7f3d40edc369d8c08492637493a0e72cc2838939980cfdb068"
-                },
-                {
-                    "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                    "type": "SECP256K1",
-                    "controller": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                    "publicKeyHex": "04a1617f65ae9683820f8c9bd73d1cb85a98969359ddafe1c99de3a36d00d156968aedceeec71b98c9a9727aa63a55a5349f830dbc7ced5b9518c04e4bb4c76328"
-                }
-            ],
-            "authentication": [
-                "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX"
-            ],
-            "extension": {
-                "recovery": [
-                    "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4"
-                ],
-                "ttl": 86400,
-                "type": 206,
-                "attributes": [
-                    {
-                        "key": "201"
-                    }
-                ]
-            },
-            "service": [
-                {
-                    "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                    "type": "IDPointerResolve",
-                    "serviceEndpoint": "127.0.0.1"
-                }
-            ],
-            "created": "2025-03-22T09:37:16Z",
-            "updated": "2025-03-22T09:37:16Z",
-            "proof": {
-                "creator": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "signatureValue": "2ExbMiHRpGSWxyZAwGgD4YnWUyXxhsp4F8mwGzE43VNrS3p3kru8JroVuox8AyXpyZrPhoepAUVtLwn3HyKnoXFcx1n"
-            }
-        }
+        "didDocument": { "...": "同 §4.3 智能体 DID 文档" }
     }
 }
 ```
 
-- 成功返回包含子链解析服务地址的 `IOA` 文档示例：
+- 成功返回子链解析服务文档：`data.didDocument` 结构同 §4.3 `DIDSubResolver` 示例。
 
-  ```json
-  {
-      "errorCode": 0,
-      "data": {
-          "didDocument": {
-              "context": [
-                  "https://www.w3.org/ns/did/v1"
-              ],
-              "version": "1.0.0",
-              "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-              "publicKey": [
-                  {
-                      "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                      "type": "SECP256K1",
-                      "controller": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                      "publicKeyHex": "04730dd9bd6256a6ffc03766e2d5b349f3734b7410116750b188b6d26b2ba092cf8c1ff07e6d61529a535681cb82f6e60501ca9ee2c1a672df631ff9a72a21c26b"
-                  },
-                  {
-                      "id": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                      "type": "SECP256K1",
-                      "controller": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                      "publicKeyHex": "04611176548da4a758187950dc2708a58ff7b4978c38cd9ae0961b889b74fa2f7be8592d69592bb2ffbc5315f8a563f479671ecf422d2ebd38d38c84c0d451b65c"
-                  },
-                  {
-                      "id": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                      "type": "SECP256K1",
-                      "controller": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                      "publicKeyHex": "04dd05980091d890191b128f29f46fce235b3e10f46cc9faab11de70d9f808e86769a9a955683eac7f3d40edc369d8c08492637493a0e72cc2838939980cfdb068"
-                  },
-                  {
-                      "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                      "type": "SECP256K1",
-                      "controller": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                      "publicKeyHex": "04a1617f65ae9683820f8c9bd73d1cb85a98969359ddafe1c99de3a36d00d156968aedceeec71b98c9a9727aa63a55a5349f830dbc7ced5b9518c04e4bb4c76328"
-                  }
-              ],
-              "authentication": [
-                  "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                  "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX"
-              ],
-              "extension": {
-                  "recovery": [
-                      "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4"
-                  ],
-                  "ttl": 86400,
-                  "type": 206,
-                  "attributes": [
-                      {
-                          "key": "201"
-                      }
-                  ]
-              },
-              "service": [
-                  {
-                      "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                      "type": "DIDSubResolve",
-                      "serviceEndpoint": "127.0.0.1",
-                      "version": "1.0.0",
-                      "serverType": 1,
-                      "protocol": 3,
-                      "port": 8080
-                  }
-              ],
-              "created": "2025-03-22T09:37:16Z",
-              "updated": "2025-03-22T09:37:16Z",
-              "proof": {
-                  "creator": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                  "signatureValue": "2ExbMiHRpGSWxyZAwGgD4YnWUyXxhsp4F8mwGzE43VNrS3p3kru8JroVuox8AyXpyZrPhoepAUVtLwn3HyKnoXFcx1n"
-              }
-          }
-      }
-  }
-  ```
+```json
+{
+    "errorCode": 0,
+    "message": "success",
+    "data": {
+        "didDocument": { "...": "同 §4.3 子链解析服务示例" }
+    }
+}
+```
 
 ### 5.3 更新（Update）
 
-更新接口主要完成IOA 文档的更新，支持HTTP POST 方法。更新操作不允许更新 <code>authentication</code> 字段，更新 <code>IOA</code> 文档时 <code>proof</code> 字段的签名者需要是 <code>authentication</code> 字段里的 <code>公钥</code> 才有权限更新成功。
+更新接口主要完成 IOA 文档的更新（传输与 `proof` 见 §5.0）。**不得**修改 `authentication`；`proof.creator` 须为 `authentication` 中的 verification method `id`。
 
 | 参数   | 字段类型   | 描述                    |
 | ----------- | ------ | ------------------------------- |
 | id          | String | 要更新的IOA     |
 | operation   | String | "update"                        |
+| proof       | Object | 签名，见 §5.0.2 |
 | didDocument | Object | 更新后的IOA文档 |
 
 #### 请求示例
 
+`didDocument` 基于 §4.3 智能体示例；可更新 `version`、`service`、`extension` 等字段，`authentication` 保持不变。
+
 ```json
 {
-    "id": "did:bid:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
+    "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
     "operation": "update",
-    "didDocument": {
-        "context": [
-            "https://www.w3.org/ns/did/v1"
-        ],
-        "version": "1.0.0",
-        "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-        "publicKey": [
-            {
-                "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "publicKeyHex": "04730dd9bd6256a6ffc03766e2d5b349f3734b7410116750b188b6d26b2ba092cf8c1ff07e6d61529a535681cb82f6e60501ca9ee2c1a672df631ff9a72a21c26b"
-            },
-            {
-                "id": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX",
-                "publicKeyHex": "04611176548da4a758187950dc2708a58ff7b4978c38cd9ae0961b889b74fa2f7be8592d69592bb2ffbc5315f8a563f479671ecf422d2ebd38d38c84c0d451b65c"
-            },
-            {
-                "id": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                "publicKeyHex": "04dd05980091d890191b128f29f46fce235b3e10f46cc9faab11de70d9f808e86769a9a955683eac7f3d40edc369d8c08492637493a0e72cc2838939980cfdb068"
-            },
-            {
-                "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "publicKeyHex": "04a1617f65ae9683820f8c9bd73d1cb85a98969359ddafe1c99de3a36d00d156968aedceeec71b98c9a9727aa63a55a5349f830dbc7ced5b9518c04e4bb4c76328"
-            },
-            {
-                "id": "did:ioa:sf5iXTcoPvqKikeAMtvCCNHWaQoqA96t",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sf5iXTcoPvqKikeAMtvCCNHWaQoqA96t",
-                "publicKeyHex": "043f404ab3bf64c30526b5e588e89d59f304b8b8ba53204e002b1cea6a7827ccd64389cd351605b100e4a2e950a0a5a121d8fa4d3c3b4ab15ed94bf54770cd2a3c"
-            }
-        ],
-        "authentication": [
-            "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-            "did:ioa:sf6hQeifqQ56d2DBwFfYb4ByHtubkLLX"
-        ],
-        "extension": {
-            "recovery": [
-                "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4"
-            ],
-            "ttl": 86400,
-            "type": 206,
-            "attributes": [
-                {
-                    "key": "201"
-                }
-            ]
-        },
-        "service": [
-            {
-                "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "type": "IDPointerResolve",
-                "serviceEndpoint": "127.0.0.1"
-            },
-            {
-                "id": "did:ioa:sf5iXTcoPvqKikeAMtvCCNHWaQoqA96t",
-                "type": "IDHubResolve",
-                "serviceEndpoint": "192.168.2.15"
-            }
-        ],
-        "created": "2025-03-22T09:44:16Z",
-        "updated": "2025-03-22T09:44:25Z",
-        "proof": {
-            "creator": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-            "signatureValue": "hLDyzcMbSpaV74RRqaN7bBqbN43Zm8FfqQdUmmGkZitVRiV5sHYv2JEkyxCtNLtw1iMJzSaUtKwgUrjop5JCGdCPwN"
-        }
-    }
+    "proof": {
+        "creator": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-6cda3f6e",
+        "signatureValue": "hLDyzcMbSpaV74RRqaN7bBqbN43Zm8FfqQdUmmGkZitVRiV5sHYv2JEkyxCtNLtw1iMJzSaUtKwgUrjop5JCGdCPwN"
+    },
+    "didDocument": { "...": "同 §4.3 智能体 DID 文档；version、service、extension 等可更新" }
 }
 ```
 
@@ -681,23 +513,35 @@ IOA 文档遵循 DID Document 规范，并在之基础上做了一定的扩展�
 
 ### 5.4 停用（Deactivate）
 
-<code>Deactivate</code> 接口主要完成对 <code>IOA</code> 文档撤销，支持 <code>HTTP POST</code> 方法。撤销后的 <code>IOA</code> 文档更新为空而不是删除, 停用 <code>IOA</code> 文档时 <code>proof</code> 字段的签名者需要是 <code>recovery</code> 字段里的 <code>公钥</code> 才有权限停用成功。
+停用接口撤销 IOA 文档（传输见 §5.0）。停用后链上记录更新为**停用文档**（见下文），不删除 DID 条目。`proof.creator` 须为链上**已存**文档的 `extension.recovery` 所列 verification method `id`；`operation` 为 `"deactivate"`。
 
-| 参数 | 字段类型   | 描述                              |
-| --------- | ------ | ---------------------------------------- |
-| id        | String | 要停用的IOA          |
-| operation | String | "delete"                                 |
-| proof     | Object | recovery中的公钥对应的私钥签名 |
+| 参数 | 字段类型 | 描述 |
+|------|----------|------|
+| id | String | 要停用的 IOA |
+| operation | String | `"deactivate"` |
+| proof | Object | 签名，见 §5.0.2 |
 
+**停用后链上文档形态**（Read 对已停用 DID 返回 `errorCode: 1`，见 §5.6）：
+
+```json
+{
+    "@context": ["https://www.w3.org/ns/did/v1"],
+    "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
+    "verificationMethod": [],
+    "authentication": []
+}
+```
+
+仅保留 `id` 与空的验证关系；**不得**含 `service`、`extension` 等业务字段。已停用的 DID **不得**再执行 §5.5 Recovery。
 
 #### 请求示例
 
 ```json
 {
-    "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
+    "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
     "operation": "deactivate",
     "proof": {
-        "creator": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
+        "creator": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-recovery01",
         "signatureValue": "w9uH8kx5kyo2vdsWz8aELJZhsdYPokf9Rnh67Yra5Lo49KHteAGmF7hzXiVmJVbXR7jMkDmj1zZuWqvfiKehenirUg"
     }
 }
@@ -714,75 +558,30 @@ IOA 文档遵循 DID Document 规范，并在之基础上做了一定的扩展�
 
 ### 5.5 恢复（Recovery）
 
-<code>Recovery</code> 接口主要完成对 <code>IOA</code> 文档里的 <code>authentication</code> 和 <code>publicKey</code> 字段里的内容修改，支持 <code>HTTP POST</code> 方法。更换密钥时 <code>proof</code> 字段的签名者需要是 <code>recovery</code> 字段里的 <code>公钥</code> 才有权限更换成功。
+恢复接口用于主控私钥丢失等场景，更新 `authentication` 与 `verificationMethod`（传输与 `proof` 见 §5.0）。**仅适用于未执行 §5.4 停用**、且链上仍存在含 `extension.recovery` 的活跃文档。`proof.creator` 须为请求体 `didDocument.extension.recovery` 所列 verification method `id`。
+
+**不得**对已停用 DID 使用 Recovery：停用后链上无 `extension.recovery`，Read 对已停用标识返回 `errorCode: 1`（§5.6）。若业务需重新启用该 `did:ioa`，由注册节点实现或治理流程另行定义，超出本规范 §5.5。
 
 | 参数       | 字段类型   | 描述               |
 | ---------------- | ------ | --------------------------- |
 | id               | String | 要恢复的IOA  |
 | operation        | String | "recovery"                  |
-| didDocumentation | Object | 更新后的did文档 |
+| proof            | Object | 签名，见 §5.0.2 |
+| didDocument | Object | 更新后的 did 文档 |
 
 #### 请求示例
 
+`didDocument` 替换 `authentication` 与 `verificationMethod` 为新主控密钥；`extension.recovery` 宜保持不变（见 §4.3）。
+
 ```json
 {
-    "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
+    "id": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp",
     "operation": "recovery",
-    "didDocument": {
-        "context": [
-            "https://www.w3.org/ns/did/v1"
-        ],
-        "version": "1.0.0",
-        "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-        "publicKey": [
-            {
-                "id": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3",
-                "publicKeyHex": "04730dd9bd6256a6ffc03766e2d5b349f3734b7410116750b188b6d26b2ba092cf8c1ff07e6d61529a535681cb82f6e60501ca9ee2c1a672df631ff9a72a21c26b"
-            },
-            {
-                "id": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-                "publicKeyHex": "04dd05980091d890191b128f29f46fce235b3e10f46cc9faab11de70d9f808e86769a9a955683eac7f3d40edc369d8c08492637493a0e72cc2838939980cfdb068"
-            },
-            {
-                "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "type": "SECP256K1",
-                "controller": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "publicKeyHex": "04a1617f65ae9683820f8c9bd73d1cb85a98969359ddafe1c99de3a36d00d156968aedceeec71b98c9a9727aa63a55a5349f830dbc7ced5b9518c04e4bb4c76328"
-            }
-        ],
-        "authentication": [
-            "did:ioa:sf24eYrmwXt6nx4fig3XJm7n9UP6PNRJ3"
-        ],
-        "extension": {
-            "recovery": [
-                "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4"
-            ],
-            "ttl": 86400,
-            "type": 206,
-            "attributes": [
-                {
-                    "key": "201"
-                }
-            ]
-        },
-        "service": [
-            {
-                "id": "did:ioa:sfS6wbcHxZ9a9d4u1iMmmPNGSMWTpSJP",
-                "type": "IDPointerResolve",
-                "serviceEndpoint": "127.0.0.1"
-            }
-        ],
-        "created": "2025-03-22T09:46:13Z",
-        "updated": "2025-03-22T09:46:18Z",
-        "proof": {
-            "creator": "did:ioa:sfXcZzrTnceK7PC67Pub2GD5Ps7EFqh4",
-            "signatureValue": "2ESSXREizoYDfkp7t5MnmqkaAtAykBi45ri2mkc3Tr1XHd1JQAnaMrxpnodqSFADw2SacNrHNmjf6KQb7BYBgyJbaKi"
-        }
-    }
+    "proof": {
+        "creator": "did:ioa:sfHBuFa7asqWztQJ3nZUiHtXjSJsyqEp#secp256k1-recovery01",
+        "signatureValue": "2ESSXREizoYDfkp7t5MnmqkaAtAykBi45ri2mkc3Tr1XHd1JQAnaMrxpnodqSFADw2SacNrHNmjf6KQb7BYBgyJbaKi"
+    },
+    "didDocument": { "...": "新 authentication/verificationMethod；extension.recovery 同 §4.3" }
 }
 ```
 
@@ -795,24 +594,61 @@ IOA 文档遵循 DID Document 规范，并在之基础上做了一定的扩展�
 }
 ```
 
+### 5.6 响应码说明
+
+所有 §5 接口响应 **SHOULD** 包含 `errorCode`（整型）与 `message`（字符串）。Read 成功时另含 `data.didDocument`。`errorCode` 为 0 表示成功；非 0 表示失败，**SHOULD** 在 `message` 中给出可读说明。
+
+| errorCode | 说明 |
+|-----------|------|
+| 0 | 成功 |
+| 1 | 文档不存在或已停用 |
+| 2 | 文档已存在（Create 重复） |
+| 3 | 签名无效或 `proof.creator` 无权限 |
+| 4 | 请求参数无效 |
+| 5 | 操作不允许（如 Update 修改 `authentication`） |
+| 其他 | 实现自定义；**MUST** 在 `message` 中说明 |
+
+#### 失败响应示例
+
+```json
+{
+    "errorCode": 1,
+    "message": "DID 文档不存在或已停用"
+}
+```
+
+```json
+{
+    "errorCode": 3,
+    "message": "签名无效或 proof.creator 无权限"
+}
+```
+
+```json
+{
+    "errorCode": 5,
+    "message": "更新不得修改 authentication"
+}
+```
+
 ---
 
-以上是完整的 **IOA 方法** 部分，包括创建、读取、更新、停用和恢复操作的详细描述和示例。
+以上是完整的 **IOA 方法** 部分，包括创建、读取、更新、停用、恢复操作及响应码说明。
 
 ## 6. 安全和隐私考虑
 
 ### 6.1 安全考虑
 
-- **公钥完整性**：IOA 的公钥存储在区块链上，确保其不可篡改。
+- **验证密钥完整性**：IOA 的 `verificationMethod` 存储在区块链上，确保其不可篡改。
 - **私钥保护**：私钥必须安全存储，避免泄露给未经授权的第三方。
+- **链上请求签名**：注册节点 **MUST** 按 §5.0.2 校验 `proof`；验签失败或 `proof.creator` 无对应操作权限时 **MUST** 拒绝请求。
+- **恢复密钥权限**：`extension.recovery` 所列 verification method **仅**用于 Deactivate/Recovery（§5.4、§5.5），**不得**用于 Create/Update；**不得**对已停用 DID 使用 §5.5；恢复主控密钥后宜评估是否轮换 recovery 密钥。
 - **防止中间人攻击**：通过加密传输（如 TLS）保护 IOA 文档的传输过程。
-- **身份恢复机制**：在私钥丢失的情况下，通过恢复密钥重新设置主密钥。
--  **防止 `DDOS` 攻击 **： `IOA` 系统基于区块链技术构建，天然防止 `DDOS` 攻击。
--  **防止隐私数据盗窃攻击 **： 在 `IOA` 系统中，所有与用户隐私相关的数据都存储在本地。仅加密算法生成的 `hash` 或字符串在链上是公开的，攻击者无法通过哈希值或字符串导出隐私数据。
+- **身份恢复机制**：主控私钥丢失且文档**未停用**时，通过 §5.5 Recovery 与 recovery 密钥重新设置 `authentication`（须事先在活跃文档中登记 `extension.recovery`）。
 
 ### 6.2 隐私考虑
 
-- **数据最小化**：仅在区块链上存储必要的信息，如公钥和服务端点，避免存储敏感信息。
+- **数据最小化**：仅在区块链上存储必要的信息，如验证密钥与服务端点，避免存储敏感信息。
 - **隐私保护**：使用加密技术（如同态加密）保护敏感数据，避免隐私泄露。
 - **访问控制**：通过加密方法控制对 IOA 及其关联服务的访问权限。
 - **匿名化技术**：在必要时使用匿名化技术（如零知识证明）保护用户隐私。
